@@ -169,6 +169,32 @@ kubectl get pod -n karmada-system -l app=karmada-apiserver -o yaml | grep encryp
 
 For more information on encryption at rest, see the [Kubernetes documentation](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).
 
+## Upgrading the Chart
+
+### Upgrading from v1.6 or earlier
+
+Up to v1.6, the `karmada-controller-manager` Deployment was rendered as a `post-install` hook. Helm does not track hook
+resources as part of the release, so the Deployment was created without Helm's ownership metadata. Since v1.7 the
+Deployment is a regular release resource, and upgrading an existing release fails with:
+
+```console
+Error: UPGRADE FAILED: rendered manifests contain a resource that already exists. Unable to continue with update: Deployment "karmada-controller-manager" in namespace "karmada-system" exists and cannot be imported into the current release: invalid ownership metadata; annotation validation error: missing key "meta.helm.sh/release-name": must be set to "karmada"; annotation validation error: missing key "meta.helm.sh/release-namespace": must be set to "karmada-system"
+```
+
+Helm checks resource ownership before any `pre-upgrade` hook runs, so the chart cannot fix this by itself. Before
+upgrading, let the release adopt the existing Deployment (replace `karmada` and `karmada-system` with your release name
+and namespace):
+
+```console
+kubectl -n karmada-system label deployment karmada-controller-manager app.kubernetes.io/managed-by=Helm --overwrite
+kubectl -n karmada-system annotate deployment karmada-controller-manager \
+  meta.helm.sh/release-name=karmada \
+  meta.helm.sh/release-namespace=karmada-system --overwrite
+```
+
+Then run `helm upgrade` as usual. With Helm v3.17 or later you can instead pass `--take-ownership` to `helm upgrade`,
+which adopts the Deployment without the manual step above.
+
 ## Uninstalling the Chart
 
 To uninstall/delete the `karmada` helm release in namespace `karmada-system`:
